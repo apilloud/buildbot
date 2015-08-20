@@ -59,7 +59,8 @@ class EC2LatentBuildSlave(AbstractLatentBuildSlave):
                  max_builds=None, notify_on_missing=[], missing_timeout=60 * 20,
                  build_wait_timeout=60 * 10, properties={}, locks=None,
                  spot_instance=False, max_spot_price=1.6, volumes=[],
-                 placement=None, price_multiplier=1.2, tags={}):
+                 placement=None, price_multiplier=1.2, tags={},
+                 instance_profile_arn=None):
 
         AbstractLatentBuildSlave.__init__(
             self, name, password, max_builds, notify_on_missing,
@@ -97,6 +98,7 @@ class EC2LatentBuildSlave(AbstractLatentBuildSlave):
         self.max_spot_price = max_spot_price
         self.volumes = volumes
         self.price_multiplier = price_multiplier
+        self.instance_profile_arn = instance_profile_arn
         if None not in [placement, region]:
             self.placement = '%s%s' % (region, placement)
         else:
@@ -269,7 +271,8 @@ class EC2LatentBuildSlave(AbstractLatentBuildSlave):
         reservation = image.run(
             key_name=self.keypair_name, security_groups=[self.security_name],
             instance_type=self.instance_type, user_data=self.user_data,
-            placement=self.placement)
+            placement=self.placement,
+            instance_profile_arn=self.instance_profile_arn)
         self.instance = reservation.instances[0]
         instance_id, image_id, start_time = self._wait_for_instance(
             reservation)
