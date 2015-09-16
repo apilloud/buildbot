@@ -385,7 +385,13 @@ class EC2LatentBuildSlave(AbstractLatentBuildSlave):
                 log.msg('%s %s has waited %d minutes for instance %s' %
                         (self.__class__.__name__, self.slavename, duration // 60,
                          self.instance.id))
-            self.instance.update()
+            try:
+                self.instance.update()
+            except boto.exception.EC2ResponseError as e:
+                # AWS is eventaully consistent
+                if 'InvalidInstanceID.NotFound' not in e.body:
+                    raise
+
         if self.instance.state == RUNNING:
             self.output = self.instance.get_console_output()
             minutes = duration // 60
@@ -410,8 +416,21 @@ class EC2LatentBuildSlave(AbstractLatentBuildSlave):
                 (self.__class__.__name__, self.slavename))
         duration = 0
         interval = self._poll_resolution
-        requests = self.conn.get_all_spot_instance_requests(
-            request_ids=[reservation.id])
+        requests = None
+        while not requests:
+            time.sleep(interval)
+            duration += interval
+            if duration % 60 == 0:
+                log.msg('%s %s has waited %d minutes for spot request %s' %
+                        (self.__class__.__name__, self.slavename,
+                         duration // 60, reservation.id))
+            try:
+                requests = self.conn.get_all_spot_instance_requests(
+                    request_ids=[reservation.id])
+            except boto.exception.EC2ResponseError as e:
+                # AWS is eventaully consistent
+                if 'InvalidSpotInstanceRequestID.NotFound' not in e.body:
+                    raise
         request = requests[0]
         request_status = request.status.code
         while request_status in SPOT_REQUEST_PENDING_STATES:
